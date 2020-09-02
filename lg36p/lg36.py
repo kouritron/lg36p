@@ -28,7 +28,7 @@ You can customize lg36 too even more easily.
 import os
 import sys
 import time
-from datetime import datetime
+import shutil
 
 from dataclasses import dataclass
 import typing
@@ -59,7 +59,9 @@ _STDOUT_LVL_FILTER_STRING = "INFO"
 _DSS_LVL_FILTER_STRING = "DBUG"
 
 # ******************** log file/dir, disk or ram, must be string.
-_DSS_LOG_DIR = f'/tmp/mnlogs/app_{int(time.time())}_{os.urandom(4).hex()}/'
+#_DSS_LOG_DIR = f'/tmp/mnlogs/app_{int(time.time())}_{os.urandom(4).hex()}/'
+_DSS_LOG_DIR = f'/home/zu/x1ws/lg36p/ignoreme/'
+
 # _DSS_LOG_FILE = ':memory:'
 _DSS_LOG_FILE = os.path.join(_DSS_LOG_DIR, 'mnlogs.sqlite3')
 
@@ -77,10 +79,10 @@ _SQLITE_PRAGMAS = [
 ]
 
 # Comment/Uncomment to start with fresh files or possibly append existing logs.
-# try:
-#     os.remove(_DSS_LOG_DIR)
-# except:
-#     pass
+try:
+    shutil.rmtree(_DSS_LOG_DIR)
+except:
+    pass
 
 # number of seconds, can be float, greater than 0.
 _DSS_FLUSH_TIMEOUT = 1
@@ -100,11 +102,22 @@ _DSS_FLUSH_TIMEOUT = 1
 # For lg36 table schema look below this section.
 
 _DEEP_VIEWS = [
+
+    # half verbose
+    """
+CREATE VIEW IF NOT EXISTS lg36_halfv AS
+
+SELECT mid, msg_lvl, session_id, unix_time, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, pname,
+tname, log_msg
+FROM lg36;
+
+    """,
+
     # short, most useful columns
     """
 CREATE VIEW IF NOT EXISTS lg36_shrt AS
 
-SELECT mid, session_id, msg_lvl, caller_filename, caller_lineno, log_msg
+SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
 FROM lg36;
     """,
 
@@ -112,7 +125,7 @@ FROM lg36;
     """
 CREATE VIEW IF NOT EXISTS lg36_shrt_ls AS
 
-SELECT mid, session_id, msg_lvl, caller_filename, caller_lineno, log_msg
+SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
 FROM lg36
 WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1);
     """,
@@ -124,7 +137,7 @@ WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1);
     """
 CREATE VIEW IF NOT EXISTS lg36_shrt_ls_no_x_file AS
 
-SELECT mid, session_id, msg_lvl, caller_filename, caller_lineno, log_msg
+SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
 FROM lg36
 WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1)
 AND caller_filename NOT LIKE "%my_demo_xcluded_file.py" ;
@@ -134,7 +147,7 @@ AND caller_filename NOT LIKE "%my_demo_xcluded_file.py" ;
     """
 CREATE VIEW IF NOT EXISTS lg36_shrt_ls_warn AS
 
-SELECT mid, session_id, msg_lvl, caller_filename, caller_lineno, log_msg
+SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
 FROM lg36
 WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1)
 AND msg_lvl NOT IN ('DBUG', 'INFO');
@@ -169,6 +182,7 @@ CREATE TABLE IF NOT EXISTS lg36(
     msg_lvl          TEXT,
     caller_filename  TEXT,
     caller_lineno    TEXT,
+    caller_funcname  TEXT,
     pname            TEXT,
     pid              TEXT,
     tname            TEXT,
@@ -230,9 +244,10 @@ class LOG_RECORD:
     # level attached to this log msg. i.e. if user said: log.dbg() then this is set to LGLVL.DEBUG
     msg_lvl: LGLVL
 
-    # caller file name and line number.
+    # caller file name, line number and function name.
     caller_filename: str
     caller_lineno: str
+    caller_funcname: str
 
     # the log msg issued to lg36.
     log_msg: str
@@ -251,16 +266,23 @@ def _mk_lgr(msg_lvl, log_msg) -> LOG_RECORD:
     mnlogger. (i.e. after a log.dbg(), log.info(), log.warn() call took place). This is because this function
     will look up the call stack to try and locate the stack frame of the function that issued the log call. """
 
+    # inspect docs: https://docs.python.org/3/library/inspect.html
     # inspect.stack() returns a list of FrameInfo Objects, the first one (idx==0) belongs to this function itself
     # _mk_lgr -> idx_0                      (this func)
     # {dbg,info,warn,...} -> idx_1          (this func caller)
     # lg36 user -> idx_2
-    caller_frame_info = inspect.stack()[2]
+    tmp_inspect_res = inspect.stack()
+    caller_frame_info = tmp_inspect_res[2]
 
     unix_time = time.time()
 
     caller_filename = caller_frame_info.filename
     caller_lineno = str(caller_frame_info.lineno)
+    caller_funcname = caller_frame_info.function
+    # caller_funcname = inspect.currentframe().f_back.f_back.f_code.co_name
+
+    # this is always going to the one line of code that looks like log.dbg('...')
+    # caller_code_cntxt = caller_frame_info.code_context
 
     cp = multiprocessing.current_process()
     ct = threading.current_thread()
@@ -276,6 +298,7 @@ def _mk_lgr(msg_lvl, log_msg) -> LOG_RECORD:
         msg_lvl=msg_lvl,
         caller_filename=caller_filename,
         caller_lineno=caller_lineno,
+        caller_funcname=caller_funcname,
         log_msg=log_msg,
         pname=pname,
         pid=pid,
@@ -380,14 +403,15 @@ class DATA_SINK_SERVICE:
 
         cursr = self._db_conn.cursor()
 
-        query = """ INSERT INTO lg36(session_id, unix_time, msg_lvl, caller_filename, caller_lineno, pname, pid,
-        tname, tid, log_msg) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """
+        query = """ INSERT INTO lg36(session_id, unix_time, msg_lvl, caller_filename, caller_lineno, caller_funcname,
+        pname, pid, tname, tid, log_msg) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """
 
         rows = []
 
         for lgrec in self._dss_buff:
             row = (self._session_id, str(lgrec.unix_time), str(lgrec.msg_lvl), lgrec.caller_filename,
-                   lgrec.caller_lineno, lgrec.pname, lgrec.pid, lgrec.tname, lgrec.tid, lgrec.log_msg)
+                   lgrec.caller_lineno, lgrec.caller_funcname, lgrec.pname, lgrec.pid, lgrec.tname, lgrec.tid,
+                   lgrec.log_msg)
             rows.append(row)
 
         cursr.executemany(query, rows)
@@ -581,13 +605,50 @@ def init_lg36(init_conf=None):
 _SEP_LINE = '-' * 80
 
 
-def dbg_dump_lg36():
+def dbg_dump_halfv():
 
-    # even if we send a flush request to another thread, we still have to sleep a bit for it to happen.
-    # might as well wait for DSS to flush on its own.
-    time.sleep(1)
+    print(f"\n# {_SEP_LINE}>>>>> dbg_dump_halfv(): ")
 
-    print(f"\n# {_SEP_LINE}>>>>> dbg_dump_lg36(): ")
+    try:
+
+        db_fd_ro = os.open(_DSS_LOG_FILE, os.O_RDONLY)  # To open in read only (works on linux and OS/X)
+        db_conn = sqlite3.connect(f"/dev/fd/{db_fd_ro}")
+        os.close(db_fd_ro)
+
+        crsr = db_conn.cursor()
+
+        # query = 'SELECT mid, msg_lvl, caller_filename, caller_lineno, log_msg FROM lg36;'
+        query = 'SELECT * FROM lg36_halfv;'
+        crsr.execute(query)
+
+        rows = crsr.fetchall()
+        for row in rows:
+
+            msg_builder = ""
+            for cell in row:
+                msg_builder = f"{msg_builder}|{cell}"
+
+            # this is not correct always.
+            if "INFO" in msg_builder:
+                msg_builder = f'{_ANSI_GREEN}{msg_builder}{_ANSI_RESET}'
+            elif "WARN" in msg_builder:
+                msg_builder = f'{_ANSI_BLUE}{msg_builder}{_ANSI_RESET}'
+            elif "ERRR" in msg_builder:
+                msg_builder = f'{_ANSI_YELLOW}{msg_builder}{_ANSI_RESET}'
+            elif "CRIT" in msg_builder:
+                msg_builder = f'{_ANSI_RED}{msg_builder}{_ANSI_RESET}'
+
+            print(msg_builder)
+
+        crsr.close()
+        print(f"# {_SEP_LINE}<<<<<\n")
+    except Exception as ex:
+        print(f'Error: {ex}')
+
+
+def dbg_dump_lg36_fmt():
+
+    print(f"\n# {_SEP_LINE}>>>>> dbg_dump_lg36_fmt(): ")
 
     try:
         # db_conn = sqlite3.connect(_DSS_LOG_FILE)
@@ -602,13 +663,13 @@ def dbg_dump_lg36():
         crsr = db_conn.cursor()
 
         # query = 'SELECT mid, msg_lvl, caller_filename, caller_lineno, log_msg FROM lg36;'
-        query = 'SELECT mid, msg_lvl, caller_filename, caller_lineno, log_msg FROM lg36_shrt;'
+        query = 'SELECT mid, msg_lvl, caller_filename, caller_lineno, caller_funcname, log_msg FROM lg36;'
         crsr.execute(query)
 
         rows = crsr.fetchall()
         for row in rows:
-            msg_builder = f"{row[0]}|{row[1]}|{os.path.basename(row[2])}:{row[3]}".ljust(32)
-            msg_builder = f'{msg_builder}|{row[4]}'
+            msg_builder = f"{row[0]}|{row[1]}|{os.path.basename(row[2])}:{row[3]}|{row[4]}".ljust(42)
+            msg_builder = f'{msg_builder}|{row[5]}'
 
             # quick and dirty color
             if "INFO" == row[1]:

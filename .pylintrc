@@ -144,7 +144,8 @@ disable=print-statement,
         global-statement,
         no-self-use,
         bare-except,
-        too-few-public-methods
+        too-few-public-methods,
+        blacklisted-name
 
 
 

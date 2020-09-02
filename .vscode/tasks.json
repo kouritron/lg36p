@@ -1,0 +1,97 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        // ---------------------------------------- gdz
+        {
+            "label": "gdz_pyclean",
+            "type": "process",
+            "command": "gdz_pyclean.py",
+            "args": [
+                "${file}"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "gdz_spell_check",
+            "type": "process",
+            "command": "gdz_spell_check.py",
+            "args": [
+                "${file}"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "gdz_search_repo",
+            "type": "process",
+            "command": "gdz_search_repo.py",
+            "args": [
+                "${file}"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "gdz_auto_bak",
+            "type": "process",
+            "command": "gdz_auto_bak.py",
+            "args": [
+                "${file}"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "gdz_ruhp",
+            "type": "process",
+            "command": "gdz_ruhp.py",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "gdz_yapf_curr_file",
+            "type": "process",
+            "command": "gdz_yapf_curr_file.py",
+            "args": [
+                "${file}"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "gdz_run_p3_script",
+            "type": "process",
+            "command": "gdz_run_p3_script.py",
+            "args": [
+                "${file}"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        // ---------------------------------------- proj specific
+    ]
+}

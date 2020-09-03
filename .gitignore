@@ -236,3 +236,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+ignoreme2/

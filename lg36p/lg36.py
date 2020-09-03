@@ -609,96 +609,50 @@ def init_lg36(init_conf=None):
 
 # we could put whole queries here and add convenient formatting but if you do create useful views,
 # its better to declare them under deep knobs so it gets saved in the sqlite file for later viewing also.
-# dont worry about saving debug formatting tho.
+# dont worry about not saving some quick and dirty formatting.
 
 _SEP_LINE = '-' * 80
 
 
-def dbg_dump_halfv():
+# quick and dirty fmt for dbg.
+def _db_row_to_string(row):
 
-    print(f"\n# {_SEP_LINE}>>>>> dbg_dump_halfv(): ")
+    msg_builder = ""
 
-    try:
+    for cell in row:
+        msg_builder = f"{msg_builder}|{cell}"
 
-        db_fd_ro = os.open(_DSS_LOG_FILE, os.O_RDONLY)  # To open in read only (works on linux and OS/X)
-        db_conn = sqlite3.connect(f"/dev/fd/{db_fd_ro}")
-        os.close(db_fd_ro)
+    # this is not correct always, but good enof for dbg
+    if "INFO" in msg_builder:
+        msg_builder = f'{_ANSI_GREEN}{msg_builder}{_ANSI_RESET}'
+    elif "WARN" in msg_builder:
+        msg_builder = f'{_ANSI_BLUE}{msg_builder}{_ANSI_RESET}'
+    elif "ERRR" in msg_builder:
+        msg_builder = f'{_ANSI_YELLOW}{msg_builder}{_ANSI_RESET}'
+    elif "CRIT" in msg_builder:
+        msg_builder = f'{_ANSI_RED}{msg_builder}{_ANSI_RESET}'
 
-        crsr = db_conn.cursor()
-
-        # query = 'SELECT mid, msg_lvl, caller_filename, caller_lineno, log_msg FROM lg36;'
-        query = 'SELECT * FROM lg36_halfv;'
-        crsr.execute(query)
-
-        rows = crsr.fetchall()
-        for row in rows:
-
-            msg_builder = ""
-            for cell in row:
-                msg_builder = f"{msg_builder}|{cell}"
-
-            # this is not correct always.
-            if "INFO" in msg_builder:
-                msg_builder = f'{_ANSI_GREEN}{msg_builder}{_ANSI_RESET}'
-            elif "WARN" in msg_builder:
-                msg_builder = f'{_ANSI_BLUE}{msg_builder}{_ANSI_RESET}'
-            elif "ERRR" in msg_builder:
-                msg_builder = f'{_ANSI_YELLOW}{msg_builder}{_ANSI_RESET}'
-            elif "CRIT" in msg_builder:
-                msg_builder = f'{_ANSI_RED}{msg_builder}{_ANSI_RESET}'
-
-            print(msg_builder)
-
-        crsr.close()
-        print(f"# {_SEP_LINE}<<<<<\n")
-    except Exception as ex:
-        print(f'Error: {ex}')
+    return msg_builder
 
 
-def dbg_dump_lg36_fmt():
+def _get_ro_db_conn_if_possible():
 
-    print(f"\n# {_SEP_LINE}>>>>> dbg_dump_lg36_fmt(): ")
+    # db_conn = sqlite3.connect(_DSS_LOG_FILE)
+    # sqlite3.connect('file:path/to/database?mode=ro', uri=True) # uri added to sqlite in version 3.4
 
-    try:
-        # db_conn = sqlite3.connect(_DSS_LOG_FILE)
+    # To open in read only (works on linux and OS/X)
+    db_fd_ro = os.open(_DSS_LOG_FILE, os.O_RDONLY)
 
-        # sqlite3.connect('file:path/to/database?mode=ro', uri=True) # uri added to sqlite in version 3.4
+    # db_conn.close() can be called as many times as you want after this. worst case its a NOP
+    db_conn = sqlite3.connect(f"/dev/fd/{db_fd_ro}")
 
-        # To open in read only (works on linux and OS/X)
-        db_fd_ro = os.open(_DSS_LOG_FILE, os.O_RDONLY)
-        db_conn = sqlite3.connect(f"/dev/fd/{db_fd_ro}")
-        os.close(db_fd_ro)
+    # not needed anymore.
+    os.close(db_fd_ro)
 
-        crsr = db_conn.cursor()
-
-        # query = 'SELECT mid, msg_lvl, caller_filename, caller_lineno, log_msg FROM lg36;'
-        query = 'SELECT mid, msg_lvl, caller_filename, caller_lineno, caller_funcname, log_msg FROM lg36;'
-        crsr.execute(query)
-
-        rows = crsr.fetchall()
-        for row in rows:
-            msg_builder = f"{row[0]}|{row[1]}|{os.path.basename(row[2])}:{row[3]}|{row[4]}".ljust(42)
-            msg_builder = f'{msg_builder}|{row[5]}'
-
-            # quick and dirty color
-            if "INFO" == row[1]:
-                msg_builder = f'{_ANSI_GREEN}{msg_builder}{_ANSI_RESET}'
-            elif "WARN" == row[1]:
-                msg_builder = f'{_ANSI_BLUE}{msg_builder}{_ANSI_RESET}'
-            elif "ERRR" == row[1]:
-                msg_builder = f'{_ANSI_YELLOW}{msg_builder}{_ANSI_RESET}'
-            elif "CRIT" == row[1]:
-                msg_builder = f'{_ANSI_RED}{msg_builder}{_ANSI_RESET}'
-
-            print(msg_builder)
-
-        crsr.close()
-        print(f"# {_SEP_LINE}<<<<<\n")
-    except Exception as ex:
-        print(f'Error: {ex}')
+    return db_conn
 
 
-def dbg_dump_lg36_knobs():
+def dump_lg36_knobs():
 
     # even if we send a flush request to another thread, we still have to sleep a bit for it to happen.
     # might as well wait for DSS to flush on its own.
@@ -722,3 +676,32 @@ def dbg_dump_lg36_knobs():
     print(f"_DSS_FLUSH_TIMEOUT: {_DSS_FLUSH_TIMEOUT}")
 
     print(f"# {_SEP_LINE}<<<<<\n")
+
+
+def dump_lg36():
+
+    view_name = "lg36"
+    print(f"\n# {_SEP_LINE}>>>>> {view_name}: ")
+
+    try:
+        db_conn = _get_ro_db_conn_if_possible()
+        db_conn.execute(f'SELECT * FROM {view_name};')
+
+        rows = db_conn.fetchall()
+        for row in rows:
+            print(_db_row_to_string(row))
+
+    except Exception as ex:
+        print(f'Error: {ex}')
+    finally:
+        # this is the correct way to handle this. close db_conn in the finally clause. You can
+        # repeat db_conn.close() ten times over, its either a NOP or it will release resources it maybe holding.
+        db_conn.close()
+
+    print(f"# {_SEP_LINE}<<<<<\n")
+
+# **********************************************************************************************************************
+# **********************************************************************************************************************
+# ********************************************************************************************* subsystem dbg view dumps
+
+# Add whatever you need.

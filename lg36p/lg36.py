@@ -72,9 +72,6 @@ _DSS_LOG_DIR = f'/home/zu/x1ws/lg36p/ignoreme/'
 _DSS_LOG_FILE = os.path.join(_DSS_LOG_DIR, 'mnlogs.sqlite3')
 
 # ******************** additional options.
-# if set to 0, lg36 will do no additional memory buffering, log msgs are saved as they arrive. If its a number
-# greater than 0, then msgs are buffered in memory until the count reaches this number and then flushed all at once.
-_DSS_BUFFER_SIZE = 0
 
 _SQLITE_PRAGMAS = [
 
@@ -89,9 +86,6 @@ try:
     shutil.rmtree(_DSS_LOG_DIR, ignore_errors=True)
 except:
     pass
-
-# number of seconds, can be float, greater than 0.
-_DSS_FLUSH_TIMEOUT = 1
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -159,8 +153,6 @@ AND msg_lvl NOT IN ('DBUG', 'INFO');
     # **************************************************************************************************#* DBG/DEV views
     # ******************************************************************************************************************
     # Add additional views here that can help inspect each subsystem separately.
-
-
 ]
 
 # ======================================================================================================================
@@ -359,7 +351,6 @@ class DATA_SINK_SERVICE:
 
         # 4 bytes (32 bits) is already as big as IPv4. With 6 bytes, chance of collision is "2 to the -48"
         self._session_id = str(os.urandom(6).hex())
-        self._dss_buff = []
 
         # ********** db connection
         try:
@@ -388,6 +379,22 @@ class DATA_SINK_SERVICE:
 
         cursr.close()  # unnecessary but do it anyway
 
+    def _save_lgr(self, lgr: LOG_RECORD):
+        """ Save the given log record into the log records table."""
+
+        cursr = self._db_conn.cursor()
+
+        query = """ INSERT INTO lg36(session_id, unix_time, msg_lvl, caller_filename, caller_lineno, caller_funcname,
+        pname, pid, tname, tid, log_msg) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """
+
+        row = (self._session_id, str(lgr.unix_time), str(lgr.msg_lvl), lgr.caller_filename, lgr.caller_lineno,
+               lgr.caller_funcname, lgr.pname, lgr.pid, lgr.tname, lgr.tid, lgr.log_msg)
+
+        cursr.execute(query, row)
+
+        # not needed in sqlite, but do it anyway.
+        cursr.close()
+
     def process_req(self, req):
         """ Process a request that was sent to the DSS Queue. The request must be an instance of:
         - LOG_RECORD
@@ -396,40 +403,13 @@ class DATA_SINK_SERVICE:
 
         # ******************** LOG_RECORD
         if isinstance(req, LOG_RECORD):
-            self._dss_buff.append(req)
-
-        if len(self._dss_buff) > _DSS_BUFFER_SIZE:
-            self.flush()
+            self._save_lgr(req)
 
         # ******************** DSS_META_REQUEST
         # NOTE: we might never really need this. I can only think of a flush() call from lg36 user needing
         # to send meta request to DSS, but flush is already done automatically every few seconds.
         # still we might add something else in the future, so here is a mechanism by which to send requests to
         # the data sink service.
-
-    def flush(self):
-        " flush any buffers managed by DSS."
-
-        cursr = self._db_conn.cursor()
-
-        query = """ INSERT INTO lg36(session_id, unix_time, msg_lvl, caller_filename, caller_lineno, caller_funcname,
-        pname, pid, tname, tid, log_msg) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """
-
-        rows = []
-
-        for lgrec in self._dss_buff:
-            row = (self._session_id, str(lgrec.unix_time), str(lgrec.msg_lvl), lgrec.caller_filename,
-                   lgrec.caller_lineno, lgrec.caller_funcname, lgrec.pname, lgrec.pid, lgrec.tname, lgrec.tid,
-                   lgrec.log_msg)
-            rows.append(row)
-
-        cursr.executemany(query, rows)
-
-        # not needed in sqlite, but do it anyway.
-        cursr.close()
-
-        # drop the buffer, since its saved to db.
-        self._dss_buff = []
 
 
 # ======================================================================================================================
@@ -441,35 +421,18 @@ def _dss_entry():
     # init dss, init the service itself. db conn.
     dss = DATA_SINK_SERVICE()
 
-    # periodic flush.
-    flush_tracker_last_time = time.time()
-
-    # no sleep is needed, because get() is blocking (even with a timeout), but the timeout should not be too small
-    # otherwise this will busy wait on the dss queue. and use up a whole CPU.
-    flush_timeout = _DSS_FLUSH_TIMEOUT
-
-    if flush_timeout < 0.1:
-        flush_timeout = 1
-
     # dss thread (which is daemonic) never leaves this loop
     while True:
 
         try:
-            next_req = _dssq.get(True, timeout=flush_timeout)
-        except queue.Empty:
-            pass
+            # block until an item is available
+            next_req = _dssq.get(block=True)
+        # except queue.Empty as ex:
+        except Exception as ex:
+            print(f"DSS Error: {ex}")
 
         # process next_req
         dss.process_req(req=next_req)
-
-        # find out if flush tracker time requires a flush.
-        flush_tracker_curr_time = time.time()
-
-        if abs(flush_tracker_curr_time - flush_tracker_last_time) >= flush_timeout:
-
-            # do flush, update last time.
-            dss.flush()
-            flush_tracker_last_time = flush_tracker_curr_time
 
 
 def _lg36_internal_init():
@@ -595,10 +558,17 @@ def init_lg36(init_conf=None):
     _lg36_internal_init()
 
 
-# we could implement this using DSS META REQUEST but its already done like every second.
-# def flush_dss():
+def flush_curr_thread():
 
-#     pass
+    # TODO
+    # the correct flush implementation would be:
+    # - generate a random string called sentinel.
+    # - post the sentinel to the dssq as a meta request, not a log record.
+    # - DSS, upon seeing a sentinel would add it to a global set. thats it just a set.
+    # - sleep wait and poll that set here, until it shows up. once it shows up, discard it from the set, return
+    # to user current threads msgs must have all been seen by the DSS, therefore we are flushed out.
+
+    pass
 
 # ======================================================================================================================
 # ============================================================================================================== DEV/DBG
@@ -672,33 +642,33 @@ def dump_lg36_knobs():
     print(f"_DSS_LOG_FILE: {_DSS_LOG_FILE}")
     print()
 
-    print(f"_DSS_BUFFER_SIZE: {_DSS_BUFFER_SIZE}")
-    print(f"_DSS_FLUSH_TIMEOUT: {_DSS_FLUSH_TIMEOUT}")
-
     print(f"# {_SEP_LINE}<<<<<\n")
 
 
 def dump_lg36():
+
+    time.sleep(1)
 
     view_name = "lg36"
     print(f"\n# {_SEP_LINE}>>>>> {view_name}: ")
 
     try:
         db_conn = _get_ro_db_conn_if_possible()
-        db_conn.execute(f'SELECT * FROM {view_name};')
+        cursr = db_conn.execute(f'SELECT * FROM {view_name};')
 
-        rows = db_conn.fetchall()
+        rows = cursr.fetchall()
         for row in rows:
             print(_db_row_to_string(row))
 
     except Exception as ex:
         print(f'Error: {ex}')
     finally:
-        # this is the correct way to handle this. close db_conn in the finally clause. You can
-        # repeat db_conn.close() ten times over, its either a NOP or it will release resources it maybe holding.
+        # this is the correct way to handle this. close db_conn in the finally clause. You can repeat
+        # db_conn.close() as many times as you like, its either a NOP or it will release resources it maybe holding.
         db_conn.close()
 
     print(f"# {_SEP_LINE}<<<<<\n")
+
 
 # **********************************************************************************************************************
 # **********************************************************************************************************************

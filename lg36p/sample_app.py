@@ -14,43 +14,26 @@ import inspect
 
 from lg36p import lg36 as log
 
-# def baz():
-#     lgr = log._mk_lgr(msg_lvl=log.LGLVL.INFO, log_msg="hi")
 
-#     print(lgr)
+def main2():
 
-# def foo():
-#     baz()
+    log.dump_lg36_knobs()
 
-# if __name__ == "__main__":
-
-#     foo()
-
-
-def hello2():
-
-    log.dbg_dump_lg36_knobs()
-
-    log.dbg('dddddd')
-
-    log.info('iiiiii')
-    log.warn('wwwww')
-    log.err('eeeeeee')
+    log.dbg('dddd')
+    log.info('iiii')
+    log.warn('wwww')
+    log.err('eeee')
     log.crit('cccc cccc CCCC')
-    log.err('eeeeeee')
-    log.warn('wwwwww')
+    # log.err('eeeeeee')
+    # log.warn('wwwwww')
     # log.crit('cccc\ncccc CCCC 22112312321321')
-    log.dbg(None)
+    # log.dbg(None)
     log.warn(None)
 
-    log.warn('wwww')
+    # log.warn('wwww')
 
-    time.sleep(1)
-
-    log.dbg_dump_lg36()
-    log.dbg_dump_halfv()
-
+    log.dump_lg36()
 
 
 if __name__ == "__main__":
-    hello2()
+    main2()

@@ -23,6 +23,12 @@ sqlite3 is just a superior version of that log file.
 of functionality is achieved in roughly 200 lines, ignoring comments/whitespace and some formalities.
 You can customize lg36 too even more easily.
 
+----------
+TODO: add a periodic job system, that would run, say, every 1000 msgs (user knob), or every 600 seconds (user knob),
+that would clean up the DSS DB. i.e. by trimming old msgs to prevent the db from growing unbounded or would export a
+JSON or dump into log stash, or s3 or something like that.
+
+
 """
 
 import os
@@ -80,7 +86,7 @@ _SQLITE_PRAGMAS = [
 
 # Comment/Uncomment to start with fresh files or possibly append existing logs.
 try:
-    shutil.rmtree(_DSS_LOG_DIR)
+    shutil.rmtree(_DSS_LOG_DIR, ignore_errors=True)
 except:
     pass
 
@@ -103,35 +109,31 @@ _DSS_FLUSH_TIMEOUT = 1
 
 _DEEP_VIEWS = [
 
+    # ******************************************************************************************************************
+    # *********************************************************************************************** DEFAULT LG36 Views
+    # ******************************************************************************************************************
+    # these are just some common/basic views provided by lg36. You can add/remove to this list as needed.
     # half verbose
-    """
-CREATE VIEW IF NOT EXISTS lg36_halfv AS
-
+    """ CREATE VIEW IF NOT EXISTS lg36_halfv AS
 SELECT mid, msg_lvl, session_id, unix_time, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, pname,
 tname, log_msg
 FROM lg36;
-
     """,
 
     # short, most useful columns
-    """
-CREATE VIEW IF NOT EXISTS lg36_shrt AS
-
+    """ CREATE VIEW IF NOT EXISTS lg36_shrt AS
 SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
 FROM lg36;
     """,
 
     # short last session only (most recent session)
-    """
-CREATE VIEW IF NOT EXISTS lg36_shrt_ls AS
-
+    """ CREATE VIEW IF NOT EXISTS lg36_shrt_ls AS
 SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
 FROM lg36
 WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1);
     """,
 
-    # exclude some files
-    # LIKE rules:
+    # exclude some files, LIKE rules:
     # wildcard char % matches zero or more of any char
     # wildcard char _ matches exactly one single of any char
     """
@@ -152,6 +154,13 @@ FROM lg36
 WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1)
 AND msg_lvl NOT IN ('DBUG', 'INFO');
 """
+
+    # ******************************************************************************************************************
+    # **************************************************************************************************#* DBG/DEV views
+    # ******************************************************************************************************************
+    # Add additional views here that can help inspect each subsystem separately.
+
+
 ]
 
 # ======================================================================================================================

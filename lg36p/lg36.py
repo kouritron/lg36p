@@ -136,7 +136,7 @@ CREATE VIEW IF NOT EXISTS lg36_shrt_ls_no_x_file AS
 SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
 FROM lg36
 WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1)
-AND caller_filename NOT LIKE "%my_demo_xcluded_file.py" ;
+AND caller_filename NOT LIKE "%my_demo_xcluded_file.py";
 """,
 
     # warn level or higher
@@ -147,7 +147,13 @@ SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_fun
 FROM lg36
 WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1)
 AND msg_lvl NOT IN ('DBUG', 'INFO');
-"""
+""",
+
+    # ********** stats and distinct info threads and process
+    """ CREATE VIEW IF NOT EXISTS stats_tname AS SELECT tname, count(tname) FROM lg36 GROUP BY tname; """,
+    """ CREATE VIEW IF NOT EXISTS stats_tid AS SELECT tid, count(tid) FROM lg36 GROUP BY tid; """,
+    """ CREATE VIEW IF NOT EXISTS stats_pname AS SELECT pname, count(pname) FROM lg36 GROUP BY pname; """,
+    """ CREATE VIEW IF NOT EXISTS stats_pid AS SELECT pid, count(pid) FROM lg36 GROUP BY pid; """,
 
     # ******************************************************************************************************************
     # **************************************************************************************************#* DBG/DEV views
@@ -560,15 +566,16 @@ def init_lg36(init_conf=None):
 
 def flush_curr_thread():
 
-    # TODO
-    # the correct flush implementation would be:
+    # TODO The correct flush implementation would be:
     # - generate a random string called sentinel.
     # - post the sentinel to the dssq as a meta request, not a log record.
     # - DSS, upon seeing a sentinel would add it to a global set. thats it just a set.
     # - sleep wait and poll that set here, until it shows up. once it shows up, discard it from the set, return
     # to user current threads msgs must have all been seen by the DSS, therefore we are flushed out.
 
-    pass
+    # a crude alternative
+    time.sleep(0.3)
+
 
 # ======================================================================================================================
 # ============================================================================================================== DEV/DBG
@@ -624,10 +631,6 @@ def _get_ro_db_conn_if_possible():
 
 def dump_lg36_knobs():
 
-    # even if we send a flush request to another thread, we still have to sleep a bit for it to happen.
-    # might as well wait for DSS to flush on its own.
-    time.sleep(1)
-
     print(f"\n# {_SEP_LINE}>>>>> dbg_dump_lg36_knobs(): ")
 
     print(f"_STDOUT_LOGGING_ENABLED: {_STDOUT_LOGGING_ENABLED}")
@@ -647,7 +650,7 @@ def dump_lg36_knobs():
 
 def dump_lg36():
 
-    time.sleep(1)
+    flush_curr_thread()
 
     view_name = "lg36"
     print(f"\n# {_SEP_LINE}>>>>> {view_name}: ")

@@ -32,6 +32,7 @@ def main2():
 
     # log.warn('wwww')
 
+    log.flush_curr_thread()
     log.dump_lg36()
 
 

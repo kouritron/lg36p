@@ -28,6 +28,7 @@ TODO: add a periodic job system, that would run, say, every 1000 msgs (user knob
 that would clean up the DSS DB. i.e. by trimming old msgs to prevent the db from growing unbounded or would export a
 JSON or dump into log stash, or s3 or something like that.
 
+TODO: maybe add a db file sync feature for each log record that is > INFO
 
 """
 

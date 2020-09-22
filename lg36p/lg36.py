@@ -32,6 +32,10 @@ TODO: maybe add a db file sync feature for each log record that is > INFO
 
 TODO: integrate the knobs here with "knob man"
 
+# TODO: to improve/solve the knobs handling:
+make it a class and take all the knobs as init args. if they are optional put default args, document them in the
+docstring, ... now the knobs section can go into project knobs, ... and be given out during init.
+
 """
 
 import os
@@ -68,11 +72,11 @@ _STDOUT_LVL_FILTER_STRING = "INFO"
 _DSS_LVL_FILTER_STRING = "DBUG"
 
 # ******************** log file/dir, disk or ram, must be string.
-#_DSS_LOG_DIR = f'/tmp/mnlogs/app_{int(time.time())}_{os.urandom(4).hex()}/'
+#_DSS_LOG_DIR = f'/tmp/lg36/app_{int(time.time())}_{os.urandom(4).hex()}/'
 _DSS_LOG_DIR = f'/home/zu/x1ws/lg36p/ignoreme/'
 
 # _DSS_LOG_FILE = ':memory:'
-_DSS_LOG_FILE = os.path.join(_DSS_LOG_DIR, 'mnlogs.sqlite3')
+_DSS_LOG_FILE = os.path.join(_DSS_LOG_DIR, 'lg36.db')
 
 # ******************** additional options.
 
@@ -93,8 +97,9 @@ except:
 # ======================================================================================================================
 # ======================================================================================================================
 # ======================================================================================== HIGHLY COOL Knobs (SQL views)
-# This is the most magical thing about lg36. Instead of writing file handlers, subsystem filters, level this, subclass
-# that, format this format that. Declare any views you want here. All of these views will be created during init.
+# This is the most magical thing about lg36. Instead of writing file handlers,
+# subsystem filters, level this, subclass that, format this format that, Declare any views you want here.
+# All of these views will be created during init.
 # These views would correspond to the different ways you could've configured logging with various config dicts,
 # except you dont have to constantly change these to see whats going on. All the facts are saved, you just choose
 # which view you want to look at at any moment in time. The idea is you can declare lots of views during dev and just
@@ -140,14 +145,14 @@ AND msg_lvl NOT IN ('DBUG', 'INFO');
     # exclude some files, LIKE rules:
     # wildcard char % matches zero or more of any char
     # wildcard char _ matches exactly one single of any char
-#     """
-# CREATE VIEW IF NOT EXISTS lg36_shrt_ls_no_x_file AS
+    #     """
+    # CREATE VIEW IF NOT EXISTS lg36_shrt_ls_no_x_file AS
 
-# SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
-# FROM lg36
-# WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1)
-# AND caller_filename NOT LIKE "%my_demo_xcluded_file.py";
-# """,
+    # SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
+    # FROM lg36
+    # WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1)
+    # AND caller_filename NOT LIKE "%my_demo_xcluded_file.py";
+    # """,
 
 
     # ********** stats and distinct info threads and process

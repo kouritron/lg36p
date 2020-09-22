@@ -30,6 +30,8 @@ JSON or dump into log stash, or s3 or something like that.
 
 TODO: maybe add a db file sync feature for each log record that is > INFO
 
+TODO: integrate the knobs here with "knob man"
+
 """
 
 import os
@@ -101,7 +103,6 @@ except:
 # It just a matter of dumping a view to stdout during dev maybe and not doing that later.
 
 # For lg36 table schema look below this section.
-
 _DEEP_VIEWS = [
 
     # ******************************************************************************************************************
@@ -109,46 +110,45 @@ _DEEP_VIEWS = [
     # ******************************************************************************************************************
     # these are just some common/basic views provided by lg36. You can add/remove to this list as needed.
     # half verbose
-    """ CREATE VIEW IF NOT EXISTS lg36_halfv AS
-SELECT mid, msg_lvl, session_id, unix_time, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, pname,
-tname, log_msg
+    """ CREATE VIEW IF NOT EXISTS lg36_med AS
+SELECT mid, msg_lvl, session_id, unix_time, SUBSTR(caller_filename, -20) AS fname_last20, caller_lineno,
+caller_funcname, pname, tname, log_msg
 FROM lg36;
     """,
 
     # short, most useful columns
     """ CREATE VIEW IF NOT EXISTS lg36_shrt AS
-SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
+SELECT mid, msg_lvl, SUBSTR(caller_filename, -20) AS fname_last20, caller_lineno, caller_funcname, log_msg
 FROM lg36;
     """,
 
-    # short last session only (most recent session)
+    # short last session only (most recent session), dont use select *, column names will be lost at least in DB brwser
     """ CREATE VIEW IF NOT EXISTS lg36_shrt_ls AS
-SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
+SELECT mid, msg_lvl, SUBSTR(caller_filename, -20) AS fname_last20, caller_lineno, caller_funcname, log_msg
 FROM lg36
 WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1);
     """,
 
-    # exclude some files, LIKE rules:
-    # wildcard char % matches zero or more of any char
-    # wildcard char _ matches exactly one single of any char
-    """
-CREATE VIEW IF NOT EXISTS lg36_shrt_ls_no_x_file AS
-
-SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
-FROM lg36
-WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1)
-AND caller_filename NOT LIKE "%my_demo_xcluded_file.py";
-""",
-
     # warn level or higher
-    """
-CREATE VIEW IF NOT EXISTS lg36_shrt_ls_warn AS
-
-SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
+    """ CREATE VIEW IF NOT EXISTS lg36_shrt_ls_warn AS
+SELECT mid, msg_lvl, SUBSTR(caller_filename, -20) AS fname_last20, caller_lineno, caller_funcname, log_msg
 FROM lg36
 WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1)
 AND msg_lvl NOT IN ('DBUG', 'INFO');
 """,
+
+    # exclude some files, LIKE rules:
+    # wildcard char % matches zero or more of any char
+    # wildcard char _ matches exactly one single of any char
+#     """
+# CREATE VIEW IF NOT EXISTS lg36_shrt_ls_no_x_file AS
+
+# SELECT mid, msg_lvl, SUBSTR(caller_filename, -1, -20), caller_lineno, caller_funcname, log_msg
+# FROM lg36
+# WHERE session_id IN (SELECT session_id FROM lg36 ORDER BY mid DESC LIMIT 1)
+# AND caller_filename NOT LIKE "%my_demo_xcluded_file.py";
+# """,
+
 
     # ********** stats and distinct info threads and process
     """ CREATE VIEW IF NOT EXISTS stats_tname AS SELECT tname, count(tname) FROM lg36 GROUP BY tname; """,
@@ -161,6 +161,7 @@ AND msg_lvl NOT IN ('DBUG', 'INFO');
     # ******************************************************************************************************************
     # Add additional views here that can help inspect each subsystem separately.
 ]
+
 
 # ======================================================================================================================
 # ======================================================================================================================

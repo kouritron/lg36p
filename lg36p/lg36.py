@@ -32,9 +32,17 @@ TODO: maybe add a db file sync feature for each log record that is > INFO
 
 TODO: integrate the knobs here with "knob man"
 
-# TODO: to improve/solve the knobs handling:
+TODO: to improve/solve the knobs handling:
 make it a class and take all the knobs as init args. if they are optional put default args, document them in the
 docstring, ... now the knobs section can go into project knobs, ... and be given out during init.
+
+TODO: add a throttle option, in case the queue is filling up much faster than can be flushed. 
+something like a short delay to each log.dbg(), log.info(), ....
+depending on q size.
+
+the delay can also rise if things dont improve, while adding more delay to dbg than to warn err crit.
+
+
 
 """
 
